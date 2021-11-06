@@ -28,4 +28,4 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
   return shouldSkip ? true : false;
 };
 func.tags = ["OptionResolver"];
-func.dependencies = ["Option"];
+func.dependencies = ["Options"];

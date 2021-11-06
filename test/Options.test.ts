@@ -10,6 +10,7 @@ import {
   INonfungiblePositionManager,
   OptionResolver,
   Option,
+  IPokeMe,
 } from "../typechain";
 import { getAddresses, Addresses } from "../hardhat/addresses";
 
@@ -26,6 +27,8 @@ describe("Options", function () {
   let addresses: Addresses;
   let cDAI: IERC20;
   let nonfungiblePositionManager: INonfungiblePositionManager;
+  let resolver: OptionResolver;
+  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 
   beforeEach(async () => {
     await deployments.fixture();
@@ -51,6 +54,7 @@ describe("Options", function () {
       addresses.NonfungiblePositionManager,
       user
     )) as INonfungiblePositionManager;
+    resolver = (await ethers.getContract("OptionResolver")) as OptionResolver;
   });
 
   it("#0: should revert when tick is out of range", async function () {
@@ -144,23 +148,32 @@ describe("Options", function () {
     await expect(option.connect(user).createOption(optionData)).to.not.be
       .reverted;
 
-    // const tokenId = 145227;
+    const tokenId = 145227;
 
     // console.log(await nonfungiblePositionManager.positions(tokenId));
 
     // Checker (Resolver) should return false
-
-
+    let checkerResult = await resolver.checker(tokenId, optionData);
+    expect(checkerResult.canExec).to.equal(false);
 
     // Manipulate market to put call in execution position
+    console.log(slot0.tick);
+    (slot0.tick as number) = strike + tickSpacing;
+    //console.log(slot0.tick);
 
     // Wait to maturity
+    await delay(10000);
 
     // Checker (Resolver) should return true
+    checkerResult = await resolver.checker(tokenId, optionData);
+    expect(checkerResult.canExec).to.equal(true);
 
+    const balanceUserBefore = await cDAI.balanceOf(await user.getAddress());
     // Settle
+    option.connect(user).settleOption(tokenId, optionData);
 
     // Expect Check
-
+    const balanceUserAfter = await cDAI.balanceOf(await user.getAddress());
+    expect(balanceUserAfter).to.equal(balanceUserBefore + notional);
   });
 });
