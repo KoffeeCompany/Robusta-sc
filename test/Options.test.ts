@@ -1,7 +1,7 @@
 import { expect } from "chai";
 import { Signer } from "ethers";
 import hre = require("hardhat");
-import { abi as IUniswapV3Pool } from "@uniswap/v3-core/artifacts/contracts/UniswapV3Pool.sol/UniswapV3Pool.json";
+import { abi as IUniswapV3PoolAbi } from "@uniswap/v3-core/artifacts/contracts/UniswapV3Pool.sol/UniswapV3Pool.json";
 import { IUniswapV3Factory, IUniswapV3Pool, Option } from "../typechain";
 
 const { ethers, deployments } = hre;
@@ -23,12 +23,13 @@ describe("Options", function () {
     )) as IUniswapV3Factory;
   });
 
-  it("#0: Call execution", async function () {
+  it("#0: should revert when tick is out of range", async function () {
     const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
     const DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+    const pokeMeAddress = "0xB3f5503f93d5Ef84b06993a1975B9D21B962892F";
     const poolAddress = await uniFactory.getPool(WETH, DAI, 500);
     const pool: IUniswapV3Pool = await ethers.getContractAt(
-      IUniswapV3Pool,
+      IUniswapV3PoolAbi,
       poolAddress,
       user
     );
@@ -37,25 +38,24 @@ describe("Options", function () {
     const tickSpacing = await pool.tickSpacing();
 
     // strike is the corresponding tick of the wanted Strike
-    const strike = slot0.tick + tickSpacing;
+    const strike = slot0.tick - tickSpacing;
     const notional = ethers.utils.parseUnits("10000", 18);
-    const maturity = hre.ethers.provider.getBlock("latest") + 10; // 10 seconds
-
+    const currentBlock = hre.ethers.provider.getBlock("latest");
+    const maturity = (await currentBlock).timestamp + 10; // 10 seconds
 
     const optionData = {
       pool: poolAddress,
-      optionType: 1,
-      strike: ethers.utils.parseUnits("2300", 6),
-      notional: ethers.utils.parseUnits("1000", 6),
-      maturity: 2,
+      optionType: 0,
+      strike: strike,
+      notional: notional,
+      maturity: maturity,
       maker: await user.getAddress(),
-      resolver: await user2.getAddress(),
+      resolver: pokeMeAddress,
       price: ethers.utils.parseEther("0.93"),
     };
+
     await expect(
       option.connect(user).createOption(optionData)
-    ).to.be.revertedWith(
-      "VM Exception while processing transaction: reverted with reason string 'The deposit criteria aren't satified.'"
-    );
+    ).to.be.revertedWith("'eject tick in range'");
   });
 });

@@ -68,7 +68,6 @@ contract Option {
     }
 
     function createOption(OptionData calldata optionData_) external payable {
-        console.log("I AM HERE");
         (, int24 tick, , , , , ) = optionData_.pool.slot0();
 
         bool isCall = optionData_.optionType == OptionType.CALL;
