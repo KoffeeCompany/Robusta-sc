@@ -1,7 +1,8 @@
 import { expect } from "chai";
 import { Signer } from "ethers";
 import hre = require("hardhat");
-import { IUniswapV3Factory, Option } from "../typechain";
+import { abi as IUniswapV3Pool } from "@uniswap/v3-core/artifacts/contracts/UniswapV3Pool.sol/UniswapV3Pool.json";
+import { IUniswapV3Factory, IUniswapV3Pool, Option } from "../typechain";
 
 const { ethers, deployments } = hre;
 
@@ -22,16 +23,27 @@ describe("Options", function () {
     )) as IUniswapV3Factory;
   });
 
-  it("#0: should revert when tick is out of the range", async function () {
+  it("#0: Call execution", async function () {
     const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const DAI = "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063";
-    const pool = await uniFactory.getPool(
-      WETH,
-      DAI,
-      ethers.utils.parseUnits("3000", 6)
+    const DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
+    const poolAddress = await uniFactory.getPool(WETH, DAI, 500);
+    const pool: IUniswapV3Pool = await ethers.getContractAt(
+      IUniswapV3Pool,
+      poolAddress,
+      user
     );
+
+    const slot0 = await pool.slot0();
+    const tickSpacing = await pool.tickSpacing();
+
+    // strike is the corresponding tick of the wanted Strike
+    const strike = slot0.tick + tickSpacing;
+    const notional = ethers.utils.parseUnits("10000", 18);
+    const maturity = hre.ethers.provider.getBlock("latest") + 10; // 10 seconds
+
+
     const optionData = {
-      pool: pool,
+      pool: poolAddress,
       optionType: 1,
       strike: ethers.utils.parseUnits("2300", 6),
       notional: ethers.utils.parseUnits("1000", 6),
@@ -39,7 +51,6 @@ describe("Options", function () {
       maker: await user.getAddress(),
       resolver: await user2.getAddress(),
       price: ethers.utils.parseEther("0.93"),
-      fee: ethers.utils.parseEther("0.01"),
     };
     await expect(
       option.connect(user).createOption(optionData)

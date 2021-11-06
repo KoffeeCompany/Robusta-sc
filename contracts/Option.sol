@@ -106,7 +106,7 @@ contract Option {
             );
 
         tokenIn.safeApprove(address(_positionManager), optionData_.notional);
-
+        console.log(optionData_.pool.fee());
         (uint256 tokenId, , , ) = _positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: token0,
@@ -232,22 +232,9 @@ contract Option {
             "Option::settleOption: option not matured yet"
         );
 
-        _executeOrNotOption(tokenId_, optionDataHash, optionData_);
-
-        delete hashById[tokenId_];
-        delete taskById[tokenId_];
-        delete buyers[optionDataHash];
-
-        _positionManager.burn(tokenId_);
-    }
-
-    function _executeOrNotOption(
-        uint256 tokenId_,
-        bytes32 optionDataHash_,
-        OptionData calldata optionData_
-    ) internal {
         bool isCall = optionData_.optionType == OptionType.CALL;
-
+        (, int24 tick, , , , , ) = optionData_.pool.slot0();
+        int24 tickSpacing = optionData_.pool.tickSpacing();
         (
             ,
             ,
@@ -263,58 +250,33 @@ contract Option {
 
         ) = _positionManager.positions(tokenId_);
 
-        uint256 strike = uint256(uint24(optionData_.strike));
-        uint256 asset_price = IPriceOracle(PRICE_ORACLE).getAssetPrice(
-            isCall ? token0 : token1
-        );
+        address optionBuyer = buyers[optionDataHash];
+
+        delete hashById[tokenId_];
+        delete taskById[tokenId_];
+        delete buyers[optionDataHash];
+
+        bool executeOption = isCall
+            ? tick >= optionData_.strike + tickSpacing
+            : tick <= optionData_.strike - tickSpacing;
 
         (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
 
-        if (isCall) {
-            if (asset_price - strike > 0) {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount0
-                    );
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount1
-                    );
-                }
-            } else {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
-                }
-            }
-        } else {
-            if (strike - asset_price > 0) {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount0
-                    );
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount1
-                    );
-                }
-            } else {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
-                }
-            }
+        if (amount0 > 0) {
+            IERC20(token0).safeTransfer(
+                executeOption ? optionBuyer : optionData_.maker,
+                amount0
+            );
         }
+
+        if (amount1 > 0) {
+            IERC20(token1).safeTransfer(
+                executeOption ? optionBuyer : optionData_.maker,
+                amount1
+            );
+        }
+
+        _positionManager.burn(tokenId_);
     }
 
     function _saveOption(
