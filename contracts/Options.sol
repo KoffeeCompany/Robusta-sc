@@ -20,6 +20,8 @@ import {
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {OptionData} from "./structs/SOptions.sol";
 import {OptionType} from "./enums/EOptions.sol";
+import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
+import {PRICE_ORACLE} from "./constants/COptions.sol";
 
 contract Option {
     using SafeERC20 for IERC20;
@@ -212,25 +214,105 @@ contract Option {
     {
         require(
             msg.sender == _positionManager.ownerOf(tokenId_),
-            "Option::cancelOption: only owner"
+            "Option::settleOption: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
         require(
             hashById[tokenId_] == optionDataHash,
-            "Option::cancelOption: invalid hash"
+            "Option::settleOption: invalid hash"
         );
         require(
-            buyers[optionDataHash] == address(0),
-            "Option::cancelOption: option already bought"
+            buyers[optionDataHash] != address(0),
+            "Option::settleOption: option not yet bought"
         );
         require(
-            optionData_.maturity <= block.timestamp,
-            "Option::cancelOption: maturity > now"
+            optionData_.maturity >= block.timestamp,
+            "Option::settleOption: option not matured yet"
         );
 
-        // TODO: Finish Settlement
+        _executeOrNotOption(tokenId_, optionDataHash, optionData_);
 
-        // amountOut should be equal strike * notional
+        delete hashById[tokenId_];
+        delete taskById[tokenId_];
+        delete buyers[optionDataHash];
+
+        _positionManager.burn(tokenId_);
+    }
+
+    function _executeOrNotOption(
+        uint256 tokenId_,
+        bytes32 optionDataHash_,
+        OptionData calldata optionData_
+    ) internal {
+        bool isCall = optionData_.optionType == OptionType.CALL;
+
+        (
+            ,
+            ,
+            address token0,
+            address token1,
+            ,
+            ,
+            ,
+            uint128 liquidity,
+            ,
+            ,
+            ,
+
+        ) = _positionManager.positions(tokenId_);
+
+        uint256 strike = uint256(uint24(optionData_.strike));
+        uint256 asset_price = IPriceOracle(PRICE_ORACLE).getAssetPrice(
+            isCall ? token0 : token1
+        );
+
+        (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
+
+        if (isCall) {
+            if (asset_price - strike > 0) {
+                if (amount0 > 0) {
+                    IERC20(token0).safeTransfer(
+                        buyers[optionDataHash_],
+                        amount0
+                    );
+                }
+                if (amount1 > 0) {
+                    IERC20(token1).safeTransfer(
+                        buyers[optionDataHash_],
+                        amount1
+                    );
+                }
+            } else {
+                if (amount0 > 0) {
+                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
+                }
+                if (amount1 > 0) {
+                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
+                }
+            }
+        } else {
+            if (strike - asset_price > 0) {
+                if (amount0 > 0) {
+                    IERC20(token0).safeTransfer(
+                        buyers[optionDataHash_],
+                        amount0
+                    );
+                }
+                if (amount1 > 0) {
+                    IERC20(token1).safeTransfer(
+                        buyers[optionDataHash_],
+                        amount1
+                    );
+                }
+            } else {
+                if (amount0 > 0) {
+                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
+                }
+                if (amount1 > 0) {
+                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
+                }
+            }
+        }
     }
 
     function _saveOption(
@@ -274,5 +356,7 @@ contract Option {
                 amount1Max: type(uint128).max
             })
         );
+
+        return (amount0, amount1);
     }
 }
