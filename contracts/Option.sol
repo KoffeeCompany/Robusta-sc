@@ -18,8 +18,8 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
-import {OptionData} from "./structs/SOptions.sol";
-import {OptionType} from "./enums/EOptions.sol";
+import {OptionData} from "./structs/SOption.sol";
+import {OptionType} from "./enums/EOption.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {PRICE_ORACLE} from "./constants/COptions.sol";
 import "hardhat/console.sol";
@@ -105,7 +105,7 @@ contract Option {
             );
 
         tokenIn.safeApprove(address(_positionManager), optionData_.notional);
-        console.log(optionData_.pool.fee());
+
         (uint256 tokenId, , , ) = _positionManager.mint(
             INonfungiblePositionManager.MintParams({
                 token0: token0,
@@ -121,7 +121,6 @@ contract Option {
                 deadline: block.timestamp // solhint-disable-line not-rely-on-time
             })
         );
-
         _saveOption(tokenId, optionData_, isCall ? token1 : token0);
 
         emit LogOptionCreation(tokenId, optionData_, msg.sender);
@@ -213,23 +212,8 @@ contract Option {
         external
         onlyPokeMe
     {
-        require(
-            msg.sender == _positionManager.ownerOf(tokenId_),
-            "Option::settleOption: only owner"
-        );
+        canSettle(tokenId_, optionData_);
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
-        require(
-            hashById[tokenId_] == optionDataHash,
-            "Option::settleOption: invalid hash"
-        );
-        require(
-            buyers[optionDataHash] != address(0),
-            "Option::settleOption: option not yet bought"
-        );
-        require(
-            optionData_.maturity >= block.timestamp,
-            "Option::settleOption: option not matured yet"
-        );
 
         bool isCall = optionData_.optionType == OptionType.CALL;
         (, int24 tick, , , , , ) = optionData_.pool.slot0();
@@ -276,6 +260,31 @@ contract Option {
         }
 
         _positionManager.burn(tokenId_);
+    }
+
+    function canSettle(uint256 tokenId_, OptionData calldata optionData_)
+        public
+        view
+        returns (bool)
+    {
+        require(
+            msg.sender == _positionManager.ownerOf(tokenId_),
+            "Option::settleOption: only owner"
+        );
+        bytes32 optionDataHash = keccak256(abi.encode(optionData_));
+        require(
+            hashById[tokenId_] == optionDataHash,
+            "Option::settleOption: invalid hash"
+        );
+        require(
+            buyers[optionDataHash] != address(0),
+            "Option::settleOption: option not yet bought"
+        );
+        require(
+            optionData_.maturity >= block.timestamp,
+            "Option::settleOption: option not matured yet"
+        );
+        return true;
     }
 
     function _saveOption(

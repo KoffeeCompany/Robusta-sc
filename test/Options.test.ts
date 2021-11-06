@@ -6,38 +6,59 @@ import {
   IERC20,
   IUniswapV3Factory,
   IUniswapV3Pool,
+  ISwapRouter,
+  INonfungiblePositionManager,
+  OptionResolver,
   Option,
 } from "../typechain";
+import { getAddresses, Addresses } from "../hardhat/addresses";
 
 const { ethers, deployments } = hre;
 
 describe("Options", function () {
   this.timeout(0);
   let option: Option;
+  let optionResolver: OptionResolver;
   let user: Signer;
   let user2: Signer;
   let uniFactory: IUniswapV3Factory;
+  let swapRouter: ISwapRouter;
+  let addresses: Addresses;
   let cDAI: IERC20;
+  let nonfungiblePositionManager: INonfungiblePositionManager;
 
   beforeEach(async () => {
     await deployments.fixture();
     [user, user2] = await ethers.getSigners();
+
+    addresses = getAddresses(hre.network.name);
+
     option = (await ethers.getContract("Option")) as Option;
     uniFactory = (await ethers.getContractAt(
       "IUniswapV3Factory",
       "0x1F98431c8aD98523631AE4a59f267346ea31F984"
     )) as IUniswapV3Factory;
-    cDAI = (await ethers.getContractAt(
-      "IERC20",
-      "0x8f3Cf7ad23Cd3CaDbD9735AFf958023239c6A063"
-    )) as IERC20;
+    cDAI = (await ethers.getContractAt("IERC20", addresses.DAI)) as IERC20;
+
+    swapRouter = (await ethers.getContractAt(
+      "ISwapRouter",
+      addresses.SwapRouter,
+      user
+    )) as ISwapRouter;
+
+    nonfungiblePositionManager = (await ethers.getContractAt(
+      "INonfungiblePositionManager",
+      addresses.NonfungiblePositionManager,
+      user
+    )) as INonfungiblePositionManager;
   });
 
   it("#0: should revert when tick is out of range", async function () {
-    const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
-    const pokeMeAddress = "0xB3f5503f93d5Ef84b06993a1975B9D21B962892F";
-    const poolAddress = await uniFactory.getPool(WETH, DAI, 500);
+    const poolAddress = await uniFactory.getPool(
+      addresses.WETH,
+      cDAI.address,
+      500
+    );
     const pool: IUniswapV3Pool = await ethers.getContractAt(
       IUniswapV3PoolAbi,
       poolAddress,
@@ -60,7 +81,7 @@ describe("Options", function () {
       notional: notional,
       maturity: maturity,
       maker: await user.getAddress(),
-      resolver: pokeMeAddress,
+      resolver: addresses.PokeMe,
       price: ethers.utils.parseEther("0.93"),
     };
 
@@ -69,11 +90,12 @@ describe("Options", function () {
     ).to.be.revertedWith("'eject tick in range'");
   });
 
-  it("#0: should create call successfully", async function () {
-    const WETH = "0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2";
-    const DAI = "0x6B175474E89094C44Da98b954EedeAC495271d0F";
-    const pokeMeAddress = "0xB3f5503f93d5Ef84b06993a1975B9D21B962892F";
-    const poolAddress = await uniFactory.getPool(WETH, DAI, 500);
+  it("#1: should create call successfully", async function () {
+    const poolAddress = await uniFactory.getPool(
+      addresses.WETH,
+      addresses.DAI,
+      500
+    );
     const pool: IUniswapV3Pool = await ethers.getContractAt(
       IUniswapV3PoolAbi,
       poolAddress,
@@ -84,10 +106,27 @@ describe("Options", function () {
     const tickSpacing = await pool.tickSpacing();
 
     // strike is the corresponding tick of the wanted Strike
-    const strike = slot0.tick + tickSpacing;
+    const strike = slot0.tick - (slot0.tick % tickSpacing) + tickSpacing;
     const notional = ethers.utils.parseUnits("10000", 18);
     const currentBlock = hre.ethers.provider.getBlock("latest");
     const maturity = (await currentBlock).timestamp + 10; // 10 seconds
+
+    // Swap Eth to DAI.
+    await swapRouter.exactOutputSingle(
+      {
+        tokenIn: addresses.WETH,
+        tokenOut: addresses.DAI,
+        fee: 500,
+        recipient: await user.getAddress(),
+        deadline: ethers.constants.MaxUint256,
+        amountOut: ethers.utils.parseUnits("10000", 18),
+        amountInMaximum: ethers.utils.parseEther("3"),
+        sqrtPriceLimitX96: ethers.constants.Zero,
+      },
+      {
+        value: ethers.utils.parseEther("3"),
+      }
+    );
 
     const optionData = {
       pool: poolAddress,
@@ -96,14 +135,32 @@ describe("Options", function () {
       notional: notional,
       maturity: maturity,
       maker: await user.getAddress(),
-      resolver: pokeMeAddress,
+      resolver: addresses.PokeMe,
       price: ethers.utils.parseEther("0.93"),
     };
 
     await cDAI.connect(user).approve(option.address, notional);
 
-    await expect(
-      option.connect(user).createOption(optionData)
-    ).to.be.revertedWith("'eject tick in range'");
+    await expect(option.connect(user).createOption(optionData)).to.not.be
+      .reverted;
+
+    // const tokenId = 145227;
+
+    // console.log(await nonfungiblePositionManager.positions(tokenId));
+
+    // Checker (Resolver) should return false
+
+
+
+    // Manipulate market to put call in execution position
+
+    // Wait to maturity
+
+    // Checker (Resolver) should return true
+
+    // Settle
+
+    // Expect Check
+
   });
 });
