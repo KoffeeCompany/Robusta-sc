@@ -22,6 +22,7 @@ import {OptionData} from "./structs/SOptions.sol";
 import {OptionType} from "./enums/EOptions.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {PRICE_ORACLE} from "./constants/COptions.sol";
+import "hardhat/console.sol";
 
 contract Option {
     using SafeERC20 for IERC20;
@@ -67,6 +68,7 @@ contract Option {
     }
 
     function createOption(OptionData calldata optionData_) external payable {
+        console.log("I AM HERE");
         (, int24 tick, , , , , ) = optionData_.pool.slot0();
 
         bool isCall = optionData_.optionType == OptionType.CALL;
