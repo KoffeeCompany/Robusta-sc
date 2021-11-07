@@ -16,6 +16,9 @@
     "lint:ts": "eslint -c .eslintrc.json --ext \"**/*.ts\" \"**/*.test.ts\"",
     "lint:sol": "solhint 'contracts/**/*.sol'",
     "postinstall": "yarn husky install",
+    "start::node": "npx hardhat node --network hardhat",
+    "deploy::option": "npx hardhat run --network localhost ./scripts/deploy_Option.ts",
+    "deploy::resolver": "npx hardhat run --network localhost ./scripts/deploy_OptionResolver.ts",
     "test": "npx hardhat test",
     "verify": "npx hardhat etherscan-verify"
   },

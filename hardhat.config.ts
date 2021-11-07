@@ -36,6 +36,9 @@ const config: HardhatUserConfig = {
         accountsBalance: ethers.utils.parseEther("10000").toString(),
       },
     },
+    localhost: {
+      url: "http://127.0.0.1:8545/",
+    },
     goerli: {
       accounts: PK ? [PK] : [],
       chainId: 5,
@@ -60,7 +63,7 @@ const config: HardhatUserConfig = {
           optimizer: { enabled: true, runs: 200 },
         },
       },
-    ]
+    ],
   },
 
   typechain: {
