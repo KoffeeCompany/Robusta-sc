@@ -22,7 +22,6 @@ import {OptionData} from "./structs/SOption.sol";
 import {OptionType} from "./enums/EOption.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {PRICE_ORACLE} from "./constants/COptions.sol";
-import "hardhat/console.sol";
 
 contract Option {
     using SafeERC20 for IERC20;
@@ -178,9 +177,10 @@ contract Option {
 
     function buyOption(uint256 tokenId_, OptionData calldata optionData_)
         external
+        payable
     {
         require(
-            msg.sender == _positionManager.ownerOf(tokenId_),
+            address(this) == _positionManager.ownerOf(tokenId_),
             "Option::cancelOption: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
@@ -199,11 +199,29 @@ contract Option {
 
         buyers[optionDataHash] = msg.sender;
 
-        IERC20(
-            optionData_.optionType == OptionType.CALL
-                ? optionData_.pool.token1()
-                : optionData_.pool.token0()
-        ).safeTransferFrom(msg.sender, address(this), optionData_.price);
+        IERC20 tokenIn = IERC20(optionData_.optionType == OptionType.CALL
+            ? optionData_.pool.token1()
+            : optionData_.pool.token0());
+
+        if (msg.value > 0) {
+            require(
+                msg.value == optionData_.price,
+                "RangeOrder:setRangeOrder:: Invalid price in."
+            );
+            require(
+                address(tokenIn) == address(_WETH9),
+                "RangeOrder:setRangeOrder:: ETH range order should use WETH token."
+            );
+
+            _WETH9.deposit{value: msg.value}();
+        } else
+            tokenIn.safeTransferFrom(
+                msg.sender,
+                address(this),
+                optionData_.price
+            );
+
+        tokenIn.safeTransfer(optionData_.maker, optionData_.price);
 
         emit LogOptionBuy(tokenId_, msg.sender);
     }
@@ -268,7 +286,7 @@ contract Option {
         returns (bool)
     {
         require(
-            msg.sender == _positionManager.ownerOf(tokenId_),
+            address(this) == _positionManager.ownerOf(tokenId_),
             "Option::settleOption: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
@@ -281,7 +299,7 @@ contract Option {
             "Option::settleOption: option not yet bought"
         );
         require(
-            optionData_.maturity >= block.timestamp,
+            optionData_.maturity <= block.timestamp,
             "Option::settleOption: option not matured yet"
         );
         return true;
@@ -300,8 +318,7 @@ contract Option {
             abi.encodeWithSelector(
                 IResolver.checker.selector,
                 tokenId_,
-                optionData_,
-                feeToken_
+                optionData_
             ),
             feeToken_
         );

@@ -13,22 +13,23 @@ import {
   IPokeMe,
 } from "../typechain";
 import { getAddresses, Addresses } from "../hardhat/addresses";
+import { sleep } from "../src/utils";
 
 const { ethers, deployments } = hre;
 
 describe("Options", function () {
   this.timeout(0);
   let option: Option;
-  let optionResolver: OptionResolver;
   let user: Signer;
   let user2: Signer;
   let uniFactory: IUniswapV3Factory;
   let swapRouter: ISwapRouter;
   let addresses: Addresses;
   let cDAI: IERC20;
+  let weth: IERC20;
   let nonfungiblePositionManager: INonfungiblePositionManager;
   let resolver: OptionResolver;
-  const delay = (ms) => new Promise((res) => setTimeout(res, ms));
+  let pokeMe: IPokeMe;
 
   beforeEach(async () => {
     await deployments.fixture();
@@ -42,12 +43,19 @@ describe("Options", function () {
       "0x1F98431c8aD98523631AE4a59f267346ea31F984"
     )) as IUniswapV3Factory;
     cDAI = (await ethers.getContractAt("IERC20", addresses.DAI)) as IERC20;
+    weth = (await ethers.getContractAt("IERC20", addresses.WETH)) as IERC20;
 
     swapRouter = (await ethers.getContractAt(
       "ISwapRouter",
       addresses.SwapRouter,
       user
     )) as ISwapRouter;
+
+    pokeMe = (await ethers.getContractAt(
+      "IPokeMe",
+      addresses.PokeMe,
+      user
+    )) as IPokeMe;
 
     nonfungiblePositionManager = (await ethers.getContractAt(
       "INonfungiblePositionManager",
@@ -139,7 +147,7 @@ describe("Options", function () {
       notional: notional,
       maturity: maturity,
       maker: await user.getAddress(),
-      resolver: addresses.PokeMe,
+      resolver: resolver.address,
       price: ethers.utils.parseEther("0.93"),
     };
 
@@ -150,30 +158,104 @@ describe("Options", function () {
 
     const tokenId = 145227;
 
+    let optionDataHash = await option.hashById(tokenId);
+
+    expect(optionDataHash).to.not.be.eq(ethers.constants.HashZero);
+
+    let taskHash = await option.taskById(tokenId);
+
+    expect(taskHash).to.not.be.eq(ethers.constants.HashZero);
+
+    let buyer = await option.buyers(optionDataHash);
+
+    expect(buyer).to.be.eq(ethers.constants.AddressZero);
+
     // console.log(await nonfungiblePositionManager.positions(tokenId));
+
+    // User 2 buy the option
+    await option.connect(user2).buyOption(tokenId, optionData, {
+      from: await user2.getAddress(),
+      value: ethers.utils.parseEther("0.93"),
+    });
+
+    buyer = await option.buyers(optionDataHash);
+
+    expect(buyer).to.be.eq(await user2.getAddress());
 
     // Checker (Resolver) should return false
     let checkerResult = await resolver.checker(tokenId, optionData);
     expect(checkerResult.canExec).to.equal(false);
 
     // Manipulate market to put call in execution position
-    console.log(slot0.tick);
-    (slot0.tick as number) = strike + tickSpacing;
-    //console.log(slot0.tick);
+    await swapRouter.exactOutputSingle(
+      {
+        tokenIn: addresses.WETH,
+        tokenOut: addresses.DAI,
+        fee: 500,
+        recipient: await user.getAddress(),
+        deadline: ethers.constants.MaxUint256,
+        amountOut: ethers.utils.parseUnits("1000000", 18),
+        amountInMaximum: ethers.utils.parseEther("300"),
+        sqrtPriceLimitX96: ethers.constants.Zero,
+      },
+      {
+        value: ethers.utils.parseEther("300"),
+      }
+    );
 
     // Wait to maturity
-    await delay(10000);
+    await hre.network.provider.send("evm_increaseTime", [10]);
+    await hre.network.provider.send("evm_mine");
 
     // Checker (Resolver) should return true
     checkerResult = await resolver.checker(tokenId, optionData);
     expect(checkerResult.canExec).to.equal(true);
 
-    const balanceUserBefore = await cDAI.balanceOf(await user.getAddress());
     // Settle
-    option.connect(user).settleOption(tokenId, optionData);
+
+    await hre.network.provider.request({
+      method: "hardhat_impersonateAccount",
+      params: [addresses.Gelato],
+    });
+
+    const gelato = await ethers.getSigner(addresses.Gelato);
+
+    await pokeMe
+      .connect(gelato)
+      .exec(
+        0,
+        addresses.WETH,
+        option.address,
+        false,
+        await pokeMe.getResolverHash(
+          resolver.address,
+          resolver.interface.encodeFunctionData("checker", [
+            tokenId,
+            optionData,
+          ])
+        ),
+        option.address,
+        checkerResult.execPayload
+      );
+
+    await hre.network.provider.request({
+      method: "hardhat_stopImpersonatingAccount",
+      params: [addresses.Gelato],
+    });
 
     // Expect Check
-    const balanceUserAfter = await cDAI.balanceOf(await user.getAddress());
-    expect(balanceUserAfter).to.equal(balanceUserBefore + notional);
+    expect(await weth.balanceOf(await user2.getAddress())).gt(0);
+
+    optionDataHash = await option.hashById(tokenId);
+
+    expect(optionDataHash).to.be.eq(ethers.constants.HashZero);
+
+    taskHash = await option.taskById(tokenId);
+
+    expect(taskHash).to.be.eq(ethers.constants.HashZero);
+
+    buyer = await option.buyers(optionDataHash);
+
+    expect(buyer).to.be.eq(ethers.constants.AddressZero);
   });
 });

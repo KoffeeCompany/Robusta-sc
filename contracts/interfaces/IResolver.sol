@@ -6,7 +6,6 @@ import {OptionData} from "../structs/SOption.sol";
 interface IResolver {
     function checker(
         uint256,
-        OptionData memory order,
-        address feeToken_
+        OptionData memory order
     ) external view returns (bool, bytes memory);
 }
