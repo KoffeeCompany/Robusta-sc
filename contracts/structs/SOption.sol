@@ -4,7 +4,7 @@ pragma solidity 0.8.7;
 import {
     IUniswapV3Pool
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
-import {OptionType} from "../enums/EOptions.sol";
+import {OptionType} from "../enums/EOption.sol";
 
 struct OptionData {
     IUniswapV3Pool pool; // Underlying asset

@@ -18,11 +18,10 @@ import {
     SafeERC20
 } from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
-import {OptionData} from "./structs/SOptions.sol";
-import {OptionType} from "./enums/EOptions.sol";
+import {OptionData} from "./structs/SOption.sol";
+import {OptionType} from "./enums/EOption.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {PRICE_ORACLE} from "./constants/COptions.sol";
-import "hardhat/console.sol";
 
 contract Option {
     using SafeERC20 for IERC20;
@@ -68,7 +67,6 @@ contract Option {
     }
 
     function createOption(OptionData calldata optionData_) external payable {
-        console.log("I AM HERE");
         (, int24 tick, , , , , ) = optionData_.pool.slot0();
 
         bool isCall = optionData_.optionType == OptionType.CALL;
@@ -122,7 +120,6 @@ contract Option {
                 deadline: block.timestamp // solhint-disable-line not-rely-on-time
             })
         );
-
         _saveOption(tokenId, optionData_, isCall ? token1 : token0);
 
         emit LogOptionCreation(tokenId, optionData_, msg.sender);
@@ -180,9 +177,10 @@ contract Option {
 
     function buyOption(uint256 tokenId_, OptionData calldata optionData_)
         external
+        payable
     {
         require(
-            msg.sender == _positionManager.ownerOf(tokenId_),
+            address(this) == _positionManager.ownerOf(tokenId_),
             "Option::cancelOption: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
@@ -201,11 +199,29 @@ contract Option {
 
         buyers[optionDataHash] = msg.sender;
 
-        IERC20(
-            optionData_.optionType == OptionType.CALL
-                ? optionData_.pool.token1()
-                : optionData_.pool.token0()
-        ).safeTransferFrom(msg.sender, address(this), optionData_.price);
+        IERC20 tokenIn = IERC20(optionData_.optionType == OptionType.CALL
+            ? optionData_.pool.token1()
+            : optionData_.pool.token0());
+
+        if (msg.value > 0) {
+            require(
+                msg.value == optionData_.price,
+                "RangeOrder:setRangeOrder:: Invalid price in."
+            );
+            require(
+                address(tokenIn) == address(_WETH9),
+                "RangeOrder:setRangeOrder:: ETH range order should use WETH token."
+            );
+
+            _WETH9.deposit{value: msg.value}();
+        } else
+            tokenIn.safeTransferFrom(
+                msg.sender,
+                address(this),
+                optionData_.price
+            );
+
+        tokenIn.safeTransfer(optionData_.maker, optionData_.price);
 
         emit LogOptionBuy(tokenId_, msg.sender);
     }
@@ -214,40 +230,12 @@ contract Option {
         external
         onlyPokeMe
     {
-        require(
-            msg.sender == _positionManager.ownerOf(tokenId_),
-            "Option::settleOption: only owner"
-        );
+        canSettle(tokenId_, optionData_);
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
-        require(
-            hashById[tokenId_] == optionDataHash,
-            "Option::settleOption: invalid hash"
-        );
-        require(
-            buyers[optionDataHash] != address(0),
-            "Option::settleOption: option not yet bought"
-        );
-        require(
-            optionData_.maturity >= block.timestamp,
-            "Option::settleOption: option not matured yet"
-        );
 
-        _executeOrNotOption(tokenId_, optionDataHash, optionData_);
-
-        delete hashById[tokenId_];
-        delete taskById[tokenId_];
-        delete buyers[optionDataHash];
-
-        _positionManager.burn(tokenId_);
-    }
-
-    function _executeOrNotOption(
-        uint256 tokenId_,
-        bytes32 optionDataHash_,
-        OptionData calldata optionData_
-    ) internal {
         bool isCall = optionData_.optionType == OptionType.CALL;
-
+        (, int24 tick, , , , , ) = optionData_.pool.slot0();
+        int24 tickSpacing = optionData_.pool.tickSpacing();
         (
             ,
             ,
@@ -263,58 +251,58 @@ contract Option {
 
         ) = _positionManager.positions(tokenId_);
 
-        uint256 strike = uint256(uint24(optionData_.strike));
-        uint256 asset_price = IPriceOracle(PRICE_ORACLE).getAssetPrice(
-            isCall ? token0 : token1
-        );
+        address optionBuyer = buyers[optionDataHash];
+
+        delete hashById[tokenId_];
+        delete taskById[tokenId_];
+        delete buyers[optionDataHash];
+
+        bool executeOption = isCall
+            ? tick >= optionData_.strike + tickSpacing
+            : tick <= optionData_.strike - tickSpacing;
 
         (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
 
-        if (isCall) {
-            if (asset_price - strike > 0) {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount0
-                    );
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount1
-                    );
-                }
-            } else {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
-                }
-            }
-        } else {
-            if (strike - asset_price > 0) {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount0
-                    );
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(
-                        buyers[optionDataHash_],
-                        amount1
-                    );
-                }
-            } else {
-                if (amount0 > 0) {
-                    IERC20(token0).safeTransfer(optionData_.maker, amount0);
-                }
-                if (amount1 > 0) {
-                    IERC20(token1).safeTransfer(optionData_.maker, amount1);
-                }
-            }
+        if (amount0 > 0) {
+            IERC20(token0).safeTransfer(
+                executeOption ? optionBuyer : optionData_.maker,
+                amount0
+            );
         }
+
+        if (amount1 > 0) {
+            IERC20(token1).safeTransfer(
+                executeOption ? optionBuyer : optionData_.maker,
+                amount1
+            );
+        }
+
+        _positionManager.burn(tokenId_);
+    }
+
+    function canSettle(uint256 tokenId_, OptionData calldata optionData_)
+        public
+        view
+        returns (bool)
+    {
+        require(
+            address(this) == _positionManager.ownerOf(tokenId_),
+            "Option::settleOption: only owner"
+        );
+        bytes32 optionDataHash = keccak256(abi.encode(optionData_));
+        require(
+            hashById[tokenId_] == optionDataHash,
+            "Option::settleOption: invalid hash"
+        );
+        require(
+            buyers[optionDataHash] != address(0),
+            "Option::settleOption: option not yet bought"
+        );
+        require(
+            optionData_.maturity <= block.timestamp,
+            "Option::settleOption: option not matured yet"
+        );
+        return true;
     }
 
     function _saveOption(
@@ -330,8 +318,7 @@ contract Option {
             abi.encodeWithSelector(
                 IResolver.checker.selector,
                 tokenId_,
-                optionData_,
-                feeToken_
+                optionData_
             ),
             feeToken_
         );
