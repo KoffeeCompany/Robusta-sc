@@ -18,6 +18,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   await deploy("Option", {
     from: deployer,
     args: [
+      addresses.Gelato,
       addresses.NonfungiblePositionManager,
       addresses.PokeMe,
       addresses.WETH,

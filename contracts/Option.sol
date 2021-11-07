@@ -26,9 +26,10 @@ import {PRICE_ORACLE} from "./constants/COptions.sol";
 contract Option {
     using SafeERC20 for IERC20;
 
-    INonfungiblePositionManager private _positionManager;
-    IPokeMe private _pokeMe;
-    IWETH9 private _WETH9;
+    address private immutable _gelato;
+    INonfungiblePositionManager private immutable _positionManager;
+    IPokeMe private immutable _pokeMe;
+    IWETH9 private immutable _WETH9;
 
     mapping(uint256 => bytes32) public hashById;
     mapping(uint256 => bytes32) public taskById;
@@ -40,13 +41,13 @@ contract Option {
         address sender
     );
     event LogOptionBuy(uint256 tokenId, address buyer);
-    event Eject(
+    event LogSettle(
         uint256 indexed tokenId,
         uint256 amount0Out,
         uint256 amount1Out,
         uint256 feeAmount
     );
-    event Cancel(uint256 indexed tokenId);
+    event LogCancel(uint256 indexed tokenId);
 
     modifier onlyPokeMe() {
         require(
@@ -57,10 +58,12 @@ contract Option {
     }
 
     constructor(
+        address gelato_,
         INonfungiblePositionManager positionManager_,
         IPokeMe pokeMe_,
         IWETH9 WETH9_
     ) {
+        _gelato = gelato_;
         _positionManager = positionManager_;
         _pokeMe = pokeMe_;
         _WETH9 = WETH9_;
@@ -172,7 +175,7 @@ contract Option {
             IERC20(token1).safeTransfer(optionData_.maker, amount1);
         }
 
-        emit Cancel(tokenId_);
+        emit LogCancel(tokenId_);
     }
 
     function buyOption(uint256 tokenId_, OptionData calldata optionData_)
@@ -199,9 +202,11 @@ contract Option {
 
         buyers[optionDataHash] = msg.sender;
 
-        IERC20 tokenIn = IERC20(optionData_.optionType == OptionType.CALL
-            ? optionData_.pool.token1()
-            : optionData_.pool.token0());
+        IERC20 tokenIn = IERC20(
+            optionData_.optionType == OptionType.CALL
+                ? optionData_.pool.token1()
+                : optionData_.pool.token0()
+        );
 
         if (msg.value > 0) {
             require(
@@ -231,6 +236,7 @@ contract Option {
         onlyPokeMe
     {
         canSettle(tokenId_, optionData_);
+        (uint256 feeAmount, address feeToken) = _pokeMe.getFeeDetails();
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
 
         bool isCall = optionData_.optionType == OptionType.CALL;
@@ -251,31 +257,49 @@ contract Option {
 
         ) = _positionManager.positions(tokenId_);
 
-        address optionBuyer = buyers[optionDataHash];
+        require(
+            feeToken == token0 || feeToken == token1,
+            "Option:settleOption: invalid fee token."
+        );
 
-        delete hashById[tokenId_];
-        delete taskById[tokenId_];
-        delete buyers[optionDataHash];
+        {
+            address optionBuyer = buyers[optionDataHash];
 
-        bool executeOption = isCall
-            ? tick >= optionData_.strike + tickSpacing
-            : tick <= optionData_.strike - tickSpacing;
+            delete hashById[tokenId_];
+            delete taskById[tokenId_];
+            delete buyers[optionDataHash];
 
-        (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
+            bool executeOption = isCall
+                ? tick >= optionData_.strike + tickSpacing
+                : tick <= optionData_.strike - tickSpacing;
 
-        if (amount0 > 0) {
-            IERC20(token0).safeTransfer(
-                executeOption ? optionBuyer : optionData_.maker,
-                amount0
-            );
+            (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
+
+            if (feeToken == token0) {
+                amount0 -= feeAmount;
+            } else {
+                amount1 -= feeAmount;
+            }
+
+            if (amount0 > 0) {
+                IERC20(token0).safeTransfer(
+                    executeOption ? optionBuyer : optionData_.maker,
+                    amount0
+                );
+            }
+
+            if (amount1 > 0) {
+                IERC20(token1).safeTransfer(
+                    executeOption ? optionBuyer : optionData_.maker,
+                    amount1
+                );
+            }
         }
 
-        if (amount1 > 0) {
-            IERC20(token1).safeTransfer(
-                executeOption ? optionBuyer : optionData_.maker,
-                amount1
-            );
-        }
+        IERC20(feeToken).safeTransfer(
+            _gelato,
+            feeAmount
+        );
 
         _positionManager.burn(tokenId_);
     }
