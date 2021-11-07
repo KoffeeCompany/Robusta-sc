@@ -20,7 +20,7 @@ contract OptionResolver is IPokeMeResolver {
     {
         try _option.canSettle(tokenId_, optionData_) returns (bool canExec) {
             return (
-                canExec,
+                true,
                 abi.encodeWithSelector(
                     IOption.settleOption.selector,
                     tokenId_,
