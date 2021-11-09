@@ -1,5 +1,13 @@
-import { deployments, ethers } from "hardhat";
-import { getAddresses } from "../hardhat/addresses";
+import hre, { ethers } from "hardhat";
+import {
+  Option,
+  IUniswapV3Factory,
+  IUniswapV3Pool,
+  ISwapRouter,
+  IERC20,
+} from "../../typechain";
+import { abi as IUniswapV3PoolAbi } from "@uniswap/v3-core/artifacts/contracts/UniswapV3Pool.sol/UniswapV3Pool.json";
+import { getAddresses } from "../../hardhat/addresses";
 
 // #region Hardhat accounts
 
@@ -68,22 +76,83 @@ import { getAddresses } from "../hardhat/addresses";
 // #endregion
 
 async function main() {
-  const { deploy } = deployments;
+  const [, user] = await ethers.getSigners();
 
-  const [deployer] = await ethers.getSigners();
-  const addresses = getAddresses("localhost");
-  const deployResult = await deploy("Option", {
-    from: await deployer.getAddress(),
-    args: [
-      addresses.Gelato,
-      addresses.NonfungiblePositionManager,
-      addresses.PokeMe,
-      addresses.WETH,
-    ],
-    log: true,
+  const option = (await ethers.getContract("Option")) as Option;
+  const resolver = (await ethers.getContract("OptionResolver")) as Option;
+
+  const addresses = getAddresses(hre.network.name);
+
+  const uniFactory = (await ethers.getContractAt(
+    "IUniswapV3Factory",
+    addresses.UniswapV3Factory
+  )) as IUniswapV3Factory;
+
+  const poolAddress = await uniFactory.getPool(
+    addresses.DAI,
+    addresses.WETH,
+    500
+  );
+
+  const pool: IUniswapV3Pool = await ethers.getContractAt(
+    IUniswapV3PoolAbi,
+    poolAddress,
+    user
+  );
+
+  const swapRouter = (await ethers.getContractAt(
+    "ISwapRouter",
+    addresses.SwapRouter,
+    user
+  )) as ISwapRouter;
+
+  const dai = (await ethers.getContractAt("IERC20", addresses.DAI)) as IERC20;
+
+  // Swap Eth to DAI.
+  await swapRouter.exactOutputSingle(
+    {
+      tokenIn: addresses.WETH,
+      tokenOut: addresses.DAI,
+      fee: 500,
+      recipient: await user.getAddress(),
+      deadline: ethers.constants.MaxUint256,
+      amountOut: ethers.utils.parseUnits("10000", 18),
+      amountInMaximum: ethers.utils.parseEther("3"),
+      sqrtPriceLimitX96: ethers.constants.Zero,
+    },
+    {
+      value: ethers.utils.parseEther("3"),
+    }
+  );
+
+  const slot0 = await pool.slot0();
+  const tickSpacing = await pool.tickSpacing();
+
+  // Options definitions
+  const optionType = 0; // 0 for Call and 1 for Put
+  const strike = slot0.tick - (slot0.tick % tickSpacing) + tickSpacing;
+  const notional = ethers.utils.parseUnits("10000", 18);
+  const maturity = 1635028859 + 90; // Current block timestamp
+  const maker = await user.getAddress();
+  const resolverAddr = resolver.address;
+  const price = ethers.utils.parseEther("1");
+
+  await dai
+    .connect(user)
+    .approve(option.address, ethers.utils.parseUnits("10000", 18));
+
+  const receipt = await option.connect(user).createOption({
+    pool: poolAddress,
+    optionType,
+    strike,
+    notional,
+    maturity,
+    maker,
+    resolver: resolverAddr,
+    price,
   });
 
-  console.log("Option Contract Address : ", deployResult.address);
+  await receipt.wait();
 }
 
 // We recommend this pattern to be able to use async/await everywhere

@@ -40,7 +40,7 @@ describe("Options", function () {
     option = (await ethers.getContract("Option")) as Option;
     uniFactory = (await ethers.getContractAt(
       "IUniswapV3Factory",
-      "0x1F98431c8aD98523631AE4a59f267346ea31F984"
+      addresses.UniswapV3Factory
     )) as IUniswapV3Factory;
     cDAI = (await ethers.getContractAt("IERC20", addresses.DAI)) as IERC20;
     weth = (await ethers.getContractAt("IERC20", addresses.WETH)) as IERC20;
