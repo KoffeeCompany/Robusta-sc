@@ -31,3 +31,6 @@ dist
 # VS Code
 .vscode
 
+# deployments
+deployments
+
