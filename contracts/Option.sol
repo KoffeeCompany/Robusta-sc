@@ -26,7 +26,7 @@ import {PRICE_ORACLE} from "./constants/COptions.sol";
 contract Option {
     using SafeERC20 for IERC20;
 
-    address private immutable _gelato;
+    address public immutable gelato;
     INonfungiblePositionManager private immutable _positionManager;
     IPokeMe private immutable _pokeMe;
     IWETH9 private immutable _WETH9;
@@ -52,7 +52,7 @@ contract Option {
     modifier onlyPokeMe() {
         require(
             msg.sender == address(_pokeMe),
-            "EjectLP::onlyPokeMe: only pokeMe"
+            "Option::onlyPokeMe: only pokeMe"
         );
         _;
     }
@@ -63,7 +63,7 @@ contract Option {
         IPokeMe pokeMe_,
         IWETH9 WETH9_
     ) {
-        _gelato = gelato_;
+        gelato = gelato_;
         _positionManager = positionManager_;
         _pokeMe = pokeMe_;
         _WETH9 = WETH9_;
@@ -81,7 +81,7 @@ contract Option {
         int24 upperTick = isCall
             ? optionData_.strike + tickSpacing
             : optionData_.strike;
-        require(tick < lowerTick || tick > upperTick, "eject tick in range");
+        require(tick < lowerTick || tick > upperTick, "strike in range");
 
         address token0 = optionData_.pool.token0();
         address token1 = optionData_.pool.token1();
@@ -259,9 +259,10 @@ contract Option {
 
         require(
             feeToken == token0 || feeToken == token1,
-            "Option:settleOption: invalid fee token."
+            "feeToken token invald."
         );
-
+        uint256 amount0;
+        uint256 amount1;
         {
             address optionBuyer = buyers[optionDataHash];
 
@@ -273,7 +274,7 @@ contract Option {
                 ? tick >= optionData_.strike + tickSpacing
                 : tick <= optionData_.strike - tickSpacing;
 
-            (uint256 amount0, uint256 amount1) = _collect(tokenId_, liquidity);
+            ( amount0, amount1) = _collect(tokenId_, liquidity);
 
             if (feeToken == token0) {
                 amount0 -= feeAmount;
@@ -296,12 +297,12 @@ contract Option {
             }
         }
 
-        IERC20(feeToken).safeTransfer(
-            _gelato,
-            feeAmount
-        );
+        // gelato fee
+        IERC20(feeToken).safeTransfer(gelato, feeAmount);
 
         _positionManager.burn(tokenId_);
+
+        emit LogSettle(tokenId_, amount0, amount1, feeAmount);
     }
 
     function canSettle(uint256 tokenId_, OptionData calldata optionData_)
