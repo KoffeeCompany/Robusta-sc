@@ -35,8 +35,8 @@ contract Option {
     mapping(bytes32 => address) public buyers;
 
     event LogOptionCreation(
-        uint256 tokenId,
-        OptionData indexed option,
+        uint256 indexed tokenId,
+        OptionData option,
         address sender
     );
     event LogOptionBuy(uint256 tokenId, address buyer);
