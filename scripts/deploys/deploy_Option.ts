@@ -75,6 +75,7 @@ async function main() {
   const deployResult = await deploy("Option", {
     from: await deployer.getAddress(),
     args: [
+      addresses.Gelato,
       addresses.NonfungiblePositionManager,
       addresses.PokeMe,
       addresses.WETH,
