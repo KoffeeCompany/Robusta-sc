@@ -99,7 +99,7 @@ describe("Options", function () {
 
     await expect(
       option.connect(user).createOption(optionData)
-    ).to.be.revertedWith("'eject tick in range'");
+    ).to.be.revertedWith("'strike in range'");
   });
 
   it("#1: should create call successfully", async function () {
