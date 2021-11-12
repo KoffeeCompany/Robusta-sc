@@ -23,6 +23,7 @@
     "run::buyoption": "npx hardhat run --network localhost ./scripts/demos/buy_Option.ts",
     "run::settleoption": "npx hardhat run --network localhost ./scripts/demos/settle.ts",
     "test:cboption": "yarn deploy::option && yarn deploy::resolver && yarn run::createoption && yarn run::buyoption",
+    "helper:poolTkn": "npx hardhat run --network localhost ./scripts/helpers/getPoolAndTokens.ts",
     "test": "npx hardhat test",
     "verify": "npx hardhat etherscan-verify"
   },
