@@ -184,20 +184,20 @@ contract Option {
     {
         require(
             address(this) == _positionManager.ownerOf(tokenId_),
-            "Option::cancelOption: only owner"
+            "Option::buyOption: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
         require(
             hashById[tokenId_] == optionDataHash,
-            "Option::cancelOption: invalid hash"
+            "Option::buyOption: invalid hash"
         );
         require(
             buyers[optionDataHash] == address(0),
-            "Option::cancelOption: option already bought"
+            "Option::buyOption: option already bought"
         );
         require(
             optionData_.maturity > block.timestamp,
-            "Option::cancelOption: option expired"
+            "Option::buyOption: option expired"
         );
 
         buyers[optionDataHash] = msg.sender;
@@ -211,11 +211,11 @@ contract Option {
         if (msg.value > 0) {
             require(
                 msg.value == optionData_.price,
-                "RangeOrder:setRangeOrder:: Invalid price in."
+                "Option:buyOption:: Invalid price in."
             );
             require(
                 address(tokenIn) == address(_WETH9),
-                "RangeOrder:setRangeOrder:: ETH range order should use WETH token."
+                "Option:buyOption:: ETH option should use WETH token."
             );
 
             _WETH9.deposit{value: msg.value}();
@@ -312,20 +312,20 @@ contract Option {
     {
         require(
             address(this) == _positionManager.ownerOf(tokenId_),
-            "Option::settleOption: only owner"
+            "Option::canSettle: only owner"
         );
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
         require(
             hashById[tokenId_] == optionDataHash,
-            "Option::settleOption: invalid hash"
+            "Option::canSettle: invalid hash"
         );
         require(
             buyers[optionDataHash] != address(0),
-            "Option::settleOption: option not yet bought"
+            "Option::canSettle: option not yet bought"
         );
         require(
             optionData_.maturity <= block.timestamp,
-            "Option::settleOption: option not matured yet"
+            "Option::canSettle: option not matured yet"
         );
         return true;
     }

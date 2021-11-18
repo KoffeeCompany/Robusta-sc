@@ -132,7 +132,10 @@ async function main() {
   const optionType = 0; // 0 for Call and 1 for Put
   const strike = slot0.tick - (slot0.tick % tickSpacing) + tickSpacing;
   const notional = ethers.utils.parseUnits("10000", 18);
-  const maturity = 1635028859 + 90; // Current block timestamp
+  const maturity =
+    ((await user.provider?.getBlock("latest"))?.timestamp ?? 0) + 90 * 3; // Current block timestamp
+
+  console.log(maturity);
   const maker = await user.getAddress();
   const resolverAddr = resolver.address;
   const price = ethers.utils.parseEther("1");

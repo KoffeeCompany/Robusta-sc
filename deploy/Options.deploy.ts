@@ -34,4 +34,4 @@ func.skip = async (hre: HardhatRuntimeEnvironment) => {
     hre.network.name === "mainnet" || hre.network.name === "goerli";
   return shouldSkip ? true : false;
 };
-func.tags = ["Options"];
+func.tags = ["Option"];
