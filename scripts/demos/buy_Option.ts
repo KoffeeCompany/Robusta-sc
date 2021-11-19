@@ -109,11 +109,11 @@ async function main() {
   const tickSpacing = await pool.tickSpacing();
 
   // Options definitions
-  const tokenId = 145227;
+  const tokenId = 154922;
   const optionType = 0; // 0 for Call and 1 for Put
   const strike = slot0.tick - (slot0.tick % tickSpacing) + tickSpacing;
   const notional = ethers.utils.parseUnits("10000", 18);
-  const maturity = 1635028859 + 90;
+  const maturity = 1637100574; // Current block timestamp
   const maker = await user.getAddress();
   const resolverAddr = resolver.address;
   const price = ethers.utils.parseEther("1");
@@ -138,7 +138,7 @@ async function main() {
 
   await receipt.wait();
 
-//   console.log((await weth.balanceOf(await user.getAddress())).toString());
+  //   console.log((await weth.balanceOf(await user.getAddress())).toString());
 }
 
 // We recommend this pattern to be able to use async/await everywhere
