@@ -14,7 +14,7 @@ const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
 
   const { deploy } = deployments;
   const { deployer } = await getNamedAccounts();
-  const addresses = getAddresses("hardhat");
+  const addresses = getAddresses(hre.network.name);
   await deploy("Option", {
     from: deployer,
     args: [

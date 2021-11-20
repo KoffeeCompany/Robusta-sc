@@ -29,7 +29,7 @@ contract Option {
     address public immutable gelato;
     INonfungiblePositionManager private immutable _positionManager;
     IPokeMe private immutable _pokeMe;
-    IWETH9 private immutable _WETH9;
+    IWETH9 public immutable WETH9;
 
     mapping(uint256 => bytes32) public hashById;
     mapping(uint256 => bytes32) public taskById;
@@ -66,7 +66,7 @@ contract Option {
         gelato = gelato_;
         _positionManager = positionManager_;
         _pokeMe = pokeMe_;
-        _WETH9 = WETH9_;
+        WETH9 = WETH9_;
     }
 
     function createOption(OptionData calldata optionData_) external payable {
@@ -94,11 +94,11 @@ contract Option {
                 "RangeOrder:setRangeOrder:: Invalid notional in."
             );
             require(
-                address(tokenIn) == address(_WETH9),
+                address(tokenIn) == address(WETH9),
                 "RangeOrder:setRangeOrder:: ETH range order should use WETH token."
             );
 
-            _WETH9.deposit{value: msg.value}();
+            WETH9.deposit{value: msg.value}();
         } else
             tokenIn.safeTransferFrom(
                 msg.sender,
@@ -214,11 +214,11 @@ contract Option {
                 "Option:buyOption:: Invalid price in."
             );
             require(
-                address(tokenIn) == address(_WETH9),
+                address(tokenIn) == address(WETH9),
                 "Option:buyOption:: ETH option should use WETH token."
             );
 
-            _WETH9.deposit{value: msg.value}();
+            WETH9.deposit{value: msg.value}();
         } else
             tokenIn.safeTransferFrom(
                 msg.sender,
