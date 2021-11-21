@@ -13,7 +13,7 @@ import {
   IPokeMe,
 } from "../typechain";
 import { getAddresses, Addresses } from "../hardhat/addresses";
-import { sleep } from "../src/utils";
+import { BigNumber } from "@ethersproject/bignumber";
 
 const { ethers, deployments } = hre;
 
@@ -81,7 +81,7 @@ describe("Options", function () {
     const tickSpacing = await pool.tickSpacing();
 
     // strike is the corresponding tick of the wanted Strike
-    const strike = slot0.tick - tickSpacing;
+    const strike = slot0.tick - (slot0.tick % tickSpacing) - tickSpacing;
     const notional = ethers.utils.parseUnits("10000", 18);
     const currentBlock = hre.ethers.provider.getBlock("latest");
     const maturity = (await currentBlock).timestamp + 10; // 10 seconds
@@ -91,6 +91,7 @@ describe("Options", function () {
       optionType: 0,
       strike: strike,
       notional: notional,
+      tickT0: slot0.tick,
       maturity: maturity,
       maker: await user.getAddress(),
       resolver: addresses.PokeMe,
@@ -99,7 +100,7 @@ describe("Options", function () {
 
     await expect(
       option.connect(user).createOption(optionData)
-    ).to.be.revertedWith("'strike in range'");
+    ).to.be.revertedWith("FOption::getStrikeTicks:: strike in wrong side");
   });
 
   it("#1: should create call successfully", async function () {
@@ -145,6 +146,7 @@ describe("Options", function () {
       optionType: 0,
       strike: strike,
       notional: notional,
+      tickT0: slot0.tick,
       maturity: maturity,
       maker: await user.getAddress(),
       resolver: resolver.address,
@@ -153,10 +155,26 @@ describe("Options", function () {
 
     await cDAI.connect(user).approve(option.address, notional);
 
-    await expect(option.connect(user).createOption(optionData)).to.not.be
-      .reverted;
+    let tokenId = 0;
 
-    const tokenId = 145227;
+    await expect(
+      option
+        .connect(user)
+        .createOption(optionData)
+        .then(async (contractTransaction) => {
+          (await contractTransaction.wait()).logs.map((log) => {
+            if (
+              log.topics.find(
+                (topic) =>
+                  topic == option.interface.getEventTopic("LogOptionCreation")
+              )
+            )
+              tokenId = BigNumber.from(
+                option.interface.parseLog(log).args[0]
+              ).toNumber();
+          });
+        })
+    ).to.not.be.reverted;
 
     let optionDataHash = await option.hashById(tokenId);
 
