@@ -22,6 +22,11 @@ import {OptionData} from "./structs/SOption.sol";
 import {OptionType} from "./enums/EOption.sol";
 import {IPriceOracle} from "./interfaces/IPriceOracle.sol";
 import {PRICE_ORACLE} from "./constants/COptions.sol";
+import {
+    _getStrikeTicks,
+    _safeTransferFrom,
+    _swapExactOutput
+} from "./functions/FOption.sol";
 
 contract Option {
     using SafeERC20 for IERC20;
@@ -29,7 +34,7 @@ contract Option {
     address public immutable gelato;
     INonfungiblePositionManager private immutable _positionManager;
     IPokeMe private immutable _pokeMe;
-    IWETH9 private immutable _WETH9;
+    IWETH9 public immutable WETH9;
 
     mapping(uint256 => bytes32) public hashById;
     mapping(uint256 => bytes32) public taskById;
@@ -66,45 +71,25 @@ contract Option {
         gelato = gelato_;
         _positionManager = positionManager_;
         _pokeMe = pokeMe_;
-        _WETH9 = WETH9_;
+        WETH9 = WETH9_;
     }
 
     function createOption(OptionData calldata optionData_) external payable {
-        (, int24 tick, , , , , ) = optionData_.pool.slot0();
-
         bool isCall = optionData_.optionType == OptionType.CALL;
 
-        int24 tickSpacing = optionData_.pool.tickSpacing();
-        int24 lowerTick = isCall
-            ? optionData_.strike
-            : optionData_.strike - tickSpacing;
-        int24 upperTick = isCall
-            ? optionData_.strike + tickSpacing
-            : optionData_.strike;
-        require(tick < lowerTick || tick > upperTick, "strike in range");
+        (int24 lowerTick, int24 upperTick) = _getStrikeTicks(
+            optionData_.pool,
+            optionData_.optionType,
+            optionData_.strike,
+            optionData_.tickT0
+        );
 
         address token0 = optionData_.pool.token0();
         address token1 = optionData_.pool.token1();
 
         IERC20 tokenIn = IERC20(isCall ? token0 : token1);
 
-        if (msg.value > 0) {
-            require(
-                msg.value == optionData_.notional,
-                "RangeOrder:setRangeOrder:: Invalid notional in."
-            );
-            require(
-                address(tokenIn) == address(_WETH9),
-                "RangeOrder:setRangeOrder:: ETH range order should use WETH token."
-            );
-
-            _WETH9.deposit{value: msg.value}();
-        } else
-            tokenIn.safeTransferFrom(
-                msg.sender,
-                address(this),
-                optionData_.notional
-            );
+        _safeTransferFrom(optionData_.notional, tokenIn, WETH9, address(this));
 
         tokenIn.safeApprove(address(_positionManager), optionData_.notional);
 
@@ -214,11 +199,11 @@ contract Option {
                 "Option:buyOption:: Invalid price in."
             );
             require(
-                address(tokenIn) == address(_WETH9),
+                address(tokenIn) == address(WETH9),
                 "Option:buyOption:: ETH option should use WETH token."
             );
 
-            _WETH9.deposit{value: msg.value}();
+            WETH9.deposit{value: msg.value}();
         } else
             tokenIn.safeTransferFrom(
                 msg.sender,
@@ -239,9 +224,6 @@ contract Option {
         (uint256 feeAmount, address feeToken) = _pokeMe.getFeeDetails();
         bytes32 optionDataHash = keccak256(abi.encode(optionData_));
 
-        bool isCall = optionData_.optionType == OptionType.CALL;
-        (, int24 tick, , , , , ) = optionData_.pool.slot0();
-        int24 tickSpacing = optionData_.pool.tickSpacing();
         (
             ,
             ,
@@ -270,30 +252,65 @@ contract Option {
             delete taskById[tokenId_];
             delete buyers[optionDataHash];
 
-            bool executeOption = isCall
-                ? tick >= optionData_.strike + tickSpacing
-                : tick <= optionData_.strike - tickSpacing;
-
-            ( amount0, amount1) = _collect(tokenId_, liquidity);
+            (amount0, amount1) = _collect(tokenId_, liquidity);
 
             if (feeToken == token0) {
+                if (amount0 < feeAmount) {
+                    amount1 -= _swapExactOutput(
+                        token1,
+                        token0,
+                        optionData_.pool.fee(),
+                        address(this),
+                        feeAmount - amount0,
+                        amount1
+                    );
+
+                    amount0 += feeAmount;
+                }
+
                 amount0 -= feeAmount;
             } else {
+                if (amount1 < feeAmount) {
+                    amount0 -= _swapExactOutput(
+                        token0,
+                        token1,
+                        optionData_.pool.fee(),
+                        address(this),
+                        feeAmount - amount1,
+                        amount0
+                    );
+
+                    amount1 += feeAmount;
+                }
+
                 amount1 -= feeAmount;
             }
 
-            if (amount0 > 0) {
-                IERC20(token0).safeTransfer(
-                    executeOption ? optionBuyer : optionData_.maker,
-                    amount0
-                );
-            }
+            {
+                (, int24 tick, , , , , ) = optionData_.pool.slot0();
 
-            if (amount1 > 0) {
-                IERC20(token1).safeTransfer(
-                    executeOption ? optionBuyer : optionData_.maker,
-                    amount1
-                );
+                bool executeOption;
+
+                {
+                    bool isCall = optionData_.optionType == OptionType.CALL;
+                    executeOption = isCall
+                        ? tick > optionData_.tickT0
+                        : tick < optionData_.tickT0;
+                }
+
+                if (amount0 > 0) {
+                    IERC20(token0).safeTransfer(
+                        executeOption ? optionBuyer : optionData_.maker,
+                        amount0
+                    );
+                }
+
+                if (amount1 > 0) {
+                    IERC20(token1).safeTransfer(
+                        executeOption ? optionBuyer : optionData_.maker,
+                        amount1
+                    );
+                }
             }
         }
 
