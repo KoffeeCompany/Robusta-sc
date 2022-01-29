@@ -13,10 +13,6 @@ import {
     IUniswapV3Pool
 } from "@uniswap/v3-core/contracts/interfaces/IUniswapV3Pool.sol";
 import {IResolver} from "./interfaces/IResolver.sol";
-import {
-    IERC20,
-    SafeERC20
-} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {OptionData} from "./structs/SOption.sol";
 import {OptionType} from "./enums/EOption.sol";

@@ -11,4 +11,6 @@ interface IOption {
     
     function settleOption(uint256 tokenId_, OptionData calldata optionData_)
         external; 
+
+    function createOption(OptionData calldata optionData_) external;
 }
