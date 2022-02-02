@@ -28,4 +28,8 @@ contract OptionsPoolManager is
 
         instantWithdrawalFee = newWithdrawalFee;
     }
+
+    function getWithdrawalFee() external returns(uint256) {
+        return instantWithdrawalFee;
+    }
 }
