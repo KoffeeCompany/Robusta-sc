@@ -99,12 +99,6 @@ async function main() {
     buyer
   );
 
-  const weth = (await ethers.getContractAt(
-    "IERC20",
-    addresses.WETH,
-    buyer
-  )) as IERC20;
-
   const slot0 = await pool.slot0();
   const tickSpacing = await pool.tickSpacing();
 
@@ -138,7 +132,7 @@ async function main() {
 
   await receipt.wait();
 
-//   console.log((await weth.balanceOf(await user.getAddress())).toString());
+  //   console.log((await weth.balanceOf(await user.getAddress())).toString());
 }
 
 // We recommend this pattern to be able to use async/await everywhere

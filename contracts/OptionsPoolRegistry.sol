@@ -2,8 +2,11 @@
 pragma solidity 0.8.7;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "hardhat/console.sol";
 
 contract OptionsPoolRegistry is Ownable {
+    using SafeMath for uint256;
 
     mapping(address => mapping(address => bool)) public options;
     mapping(address => uint256) public providers;
@@ -26,16 +29,21 @@ contract OptionsPoolRegistry is Ownable {
         options[owner_][option_] = true;
         emit RegisterOption(owner_, option_);
     }
-    
+
     function registerLiquidity(address owner_, uint256 share_)
         external
         onlyOwner
     {
         require(owner_ != address(0), "!owner_");
-        providers[owner_] += share_;
+        if (providers[owner_] != 0) {
+            uint256 stored = providers[owner_];
+            providers[owner_] = stored.add(share_);
+        } else {
+            providers[owner_] = share_;
+        }
         emit RegisterLiquidity(owner_, share_);
     }
-    
+
     function revokeLiquidity(address owner_, uint256 share_)
         external
         onlyOwner

@@ -2,7 +2,9 @@
 pragma solidity 0.8.7;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {
     ReentrancyGuardUpgradeable
@@ -29,7 +31,6 @@ contract OptionsPoolStorageV1 is
 // When we need to add new storage variables, we create a new version of OptionsPoolStorage
 // e.g. OptionsPoolStorage<versionNumber>, so finally it would look like
 // contract OptionsVaultStorage is OptionsPoolStorageV1, OptionsPoolStorageV2
-contract OptionsPoolStorage is
-    OptionsPoolStorageV1
-{
+contract OptionsPoolStorage is OptionsPoolStorageV1 {
+
 }

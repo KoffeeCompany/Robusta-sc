@@ -8,9 +8,9 @@ interface IOption {
         external
         view
         returns (bool);
-    
+
     function settleOption(uint256 tokenId_, OptionData calldata optionData_)
-        external; 
+        external;
 
     function createOption(OptionData calldata optionData_) external;
 }

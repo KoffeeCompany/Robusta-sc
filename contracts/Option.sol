@@ -270,7 +270,7 @@ contract Option {
                 ? tick >= optionData_.strike + tickSpacing
                 : tick <= optionData_.strike - tickSpacing;
 
-            ( amount0, amount1) = _collect(tokenId_, liquidity);
+            (amount0, amount1) = _collect(tokenId_, liquidity);
 
             if (feeToken == token0) {
                 amount0 -= feeAmount;

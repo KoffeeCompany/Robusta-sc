@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.7;
 
-
 import {OptionType} from "./enums/EOption.sol";
 import {
     INonfungiblePositionManager
@@ -13,7 +12,9 @@ import {IOptionsPoolRegistry} from "./interfaces/IOptionsPoolRegistry.sol";
 import {IOptionsPoolManager} from "./interfaces/IOptionsPoolManager.sol";
 import {IPokeMe} from "./interfaces/IPokeMe.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import {
+    SafeERC20
+} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import {IWETH9} from "./interfaces/IWETH9.sol";
 import {DSMath} from "./lib/DSMath.sol";
@@ -27,7 +28,7 @@ import {
     ERC20Upgradeable
 } from "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
 
-contract OptionsPool is 
+contract OptionsPool is
     DSMath,
     ReentrancyGuardUpgradeable,
     OwnableUpgradeable,
@@ -40,7 +41,7 @@ contract OptionsPool is
     INonfungiblePositionManager private immutable _positionManager;
     IPokeMe private immutable _pokeMe;
     IWETH9 private immutable _WETH9;
-    
+
     // Recipient for withdrawal fees
     address public feeRecipient;
     uint256 public minimumSupply;
@@ -48,7 +49,7 @@ contract OptionsPool is
     int24 private _tickSpacing;
     address public baseToken;
     address public quoteToken;
-    
+
     IOptionsPoolRegistry public immutable registry;
     IOptionsPoolManager public immutable manager;
 
@@ -138,7 +139,7 @@ contract OptionsPool is
         //
     }
 
-     /**
+    /**
      * @notice Deposits the `baseToken` into the contract and mint shares.
      * @param amount is the amount of `baseToken` to deposit
      */
@@ -160,8 +161,9 @@ contract OptionsPool is
 
         uint256 shareSupply = totalSupply();
 
-        uint256 share =
-            shareSupply == 0 ? amount : amount.mul(shareSupply).div(previousTotal);
+        uint256 share = shareSupply == 0
+            ? amount
+            : amount.mul(shareSupply).div(previousTotal);
 
         registry.registerLiquidity(msg.sender, share);
         emit Deposit(msg.sender, amount, share);
@@ -184,8 +186,9 @@ contract OptionsPool is
      * @param feeless is whether a withdraw fee is charged
      */
     function _withdraw(uint256 share, bool feeless) private returns (uint256) {
-        (uint256 amountAfterFee, uint256 feeAmount) =
-            withdrawAmountWithShares(share);
+        (uint256 amountAfterFee, uint256 feeAmount) = withdrawAmountWithShares(
+            share
+        );
 
         if (feeless) {
             amountAfterFee = amountAfterFee.add(feeAmount);
@@ -234,17 +237,14 @@ contract OptionsPool is
      * @param share is the number of shares used to withdraw
      * @param currentBalance is the value returned by totalBalance(). This is passed in to save gas.
      */
-    function _withdrawAmountWithShares(
-        uint256 share,
-        uint256 currentBalance
-    )
-    private
-    view
-    returns (
-        uint256 withdrawAmount,
-        uint256 newAssetBalance,
-        uint256 newShareSupply
-    )
+    function _withdrawAmountWithShares(uint256 share, uint256 currentBalance)
+        private
+        view
+        returns (
+            uint256 withdrawAmount,
+            uint256 newAssetBalance,
+            uint256 newShareSupply
+        )
     {
         uint256 total = currentBalance;
 

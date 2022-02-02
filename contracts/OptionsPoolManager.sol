@@ -1,14 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.7;
 
-import { OptionsPoolStorage } from "./OptionsPoolStorage.sol";
+import {OptionsPoolStorage} from "./OptionsPoolStorage.sol";
 
-contract OptionsPoolManager is 
-    OptionsPoolStorage  
-{    
+contract OptionsPoolManager is OptionsPoolStorage {
     event WithdrawalFeeSet(uint256 oldFee, uint256 newFee);
-    
-    constructor() {        
+
+    constructor() {
         // hardcode the initial withdrawal fee
         instantWithdrawalFee = 0.005 ether;
     }
@@ -29,7 +27,7 @@ contract OptionsPoolManager is
         instantWithdrawalFee = newWithdrawalFee;
     }
 
-    function getWithdrawalFee() external returns(uint256) {
+    function getWithdrawalFee() external returns (uint256) {
         return instantWithdrawalFee;
     }
 }
