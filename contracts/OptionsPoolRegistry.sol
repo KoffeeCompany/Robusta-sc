@@ -12,6 +12,7 @@ contract OptionsPoolRegistry is Ownable {
     mapping(address => uint256) public providers;
 
     event RegisterOption(address owner, address option);
+    event RevokeOption(address owner, address option);
     event RegisterLiquidity(address owner, uint256 share);
     event RevokeLiquidity(address owner, uint256 share);
 
@@ -28,6 +29,19 @@ contract OptionsPoolRegistry is Ownable {
         require(option_ != address(0), "!option_");
         options[owner_][option_] = true;
         emit RegisterOption(owner_, option_);
+    }
+
+    function revokeOption(address owner_, address option_)
+        external
+        onlyOwner
+    {
+        require(owner_ != address(0), "!owner_");
+        require(option_ != address(0), "!option_");
+        if(options[owner_][option_] == true)
+        {
+            delete options[owner_][option_];
+            emit RevokeOption(owner_, option_);
+        }
     }
 
     function registerLiquidity(address owner_, uint256 share_)
@@ -49,7 +63,13 @@ contract OptionsPoolRegistry is Ownable {
         onlyOwner
     {
         require(owner_ != address(0), "!owner_");
+        uint256 stored = providers[owner_];
+        require(stored >= share_, "share to revoke is greater than stored");
         providers[owner_] -= share_;
+        if(providers[owner_] == 0)
+        {
+            delete providers[owner_];
+        }
         emit RevokeLiquidity(owner_, share_);
     }
 }

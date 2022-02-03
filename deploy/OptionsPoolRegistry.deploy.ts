@@ -6,7 +6,7 @@ import { sleep } from "../src/utils";
 const func: DeployFunction = async (hre: HardhatRuntimeEnvironment) => {
   if (hre.network.name === "mainnet" || hre.network.name === "goerli") {
     console.log(
-      `Deploying Option to ${hre.network.name}. Hit ctrl + c to abort`
+      `Deploying Option Registy to ${hre.network.name}. Hit ctrl + c to abort`
     );
     await sleep(10000);
   }
