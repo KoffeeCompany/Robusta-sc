@@ -11,6 +11,14 @@ contract OptionsPoolManager is OptionsPoolStorage {
         instantWithdrawalFee = 0.005 ether;
     }
 
+    function initialize(
+        address owner_
+    ) external initializer {
+        require(owner_ != address(0), "!owner_");
+        __Ownable_init();
+        transferOwnership(owner_);
+    }
+
     /**
      * @notice Sets the new withdrawal fee
      * @param newWithdrawalFee is the fee paid in tokens when withdrawing

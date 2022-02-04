@@ -121,6 +121,7 @@ contract OptionsPool is
         __ERC20_init(tokenName_, tokenSymbol_);
         __Ownable_init();
         transferOwnership(owner_);
+        manager.initialize(owner_);
 
         feeRecipient = feeRecipient_;
         minimumSupply = minimumSupply_;

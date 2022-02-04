@@ -3,7 +3,6 @@ pragma solidity 0.8.7;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {SafeMath} from "@openzeppelin/contracts/utils/math/SafeMath.sol";
-import "hardhat/console.sol";
 
 contract OptionsPoolRegistry is Ownable {
     using SafeMath for uint256;
